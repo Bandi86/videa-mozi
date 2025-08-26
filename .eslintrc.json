@@ -1,0 +1,15 @@
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "plugins": ["@typescript-eslint", "prettier", "unused-imports", "import"],
+  "extends": ["eslint:recommended", "plugin:@typescript-eslint/recommended", "prettier"],
+  "rules": {
+    "prettier/prettier": "error",
+    "unused-imports/no-unused-imports": "warn",
+    "import/order": [
+      "warn",
+      { "alphabetize": { "order": "asc", "caseInsensitive": true }, "newlines-between": "always" }
+    ]
+  },
+  "ignorePatterns": ["dist", "node_modules"]
+}
