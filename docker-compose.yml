@@ -1,0 +1,286 @@
+version: '3.8'
+
+services:
+  # API Gateway - Main entry point
+  api-gateway:
+    build:
+      context: ./app/backend
+      dockerfile: Dockerfile
+    ports:
+      - '3001:3001'
+    environment:
+      - NODE_ENV=development
+      - USER_SERVICE_URL=http://user-service:3002
+      - CONTENT_SERVICE_URL=http://content-service:3003
+      - SOCIAL_SERVICE_URL=http://social-service:3004
+      - MODERATION_SERVICE_URL=http://moderation-service:3005
+      - MEDIA_SERVICE_URL=http://media-service:3006
+      - MONITORING_SERVICE_URL=http://monitoring-service:3007
+    depends_on:
+      - user-service
+      - content-service
+      - social-service
+      - moderation-service
+      - media-service
+      - monitoring-service
+    networks:
+      - videa-mozi-network
+    volumes:
+      - ./app/backend:/app
+      - /app/node_modules
+
+  # User Service - Authentication & User Management
+  user-service:
+    build:
+      context: ./services/user-service
+      dockerfile: Dockerfile
+    ports:
+      - '3002:3002'
+    environment:
+      - NODE_ENV=development
+      - PORT=3002
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/videa_mozi_users
+      - JWT_ACCESS_SECRET=user-service-access-secret-key-32-chars-minimum-secure-production-key
+      - JWT_REFRESH_SECRET=user-service-refresh-secret-key-32-chars-minimum-secure-production-key
+      - JWT_ACCESS_EXPIRES_IN=15m
+      - JWT_REFRESH_EXPIRES_IN=7d
+      - REDIS_URL=redis://redis:6379
+      - CORS_ORIGIN=http://localhost:3000
+      - LOG_LEVEL=info
+      - RABBITMQ_URL=amqp://admin:password@rabbitmq:5672
+      - METRICS_ENABLED=true
+      - HEALTH_CHECK_INTERVAL=30000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    networks:
+      - videa-mozi-network
+    volumes:
+      - ./services/user-service:/app
+      - /app/node_modules
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3002/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Content Service - Movies & Series Management
+  content-service:
+    build:
+      context: ./services/content-service
+      dockerfile: Dockerfile
+    ports:
+      - '3003:3003'
+    environment:
+      - NODE_ENV=development
+      - PORT=3003
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/videa_mozi_content
+      - REDIS_URL=redis://redis:6379
+      - USER_SERVICE_URL=http://user-service:3002
+      - SOCIAL_SERVICE_URL=http://social-service:3004
+      - CORS_ORIGIN=http://localhost:3000
+      - LOG_LEVEL=info
+      - RABBITMQ_URL=amqp://admin:password@rabbitmq:5672
+      - METRICS_ENABLED=true
+      - HEALTH_CHECK_INTERVAL=30000
+      - MAX_CONTENT_PER_PAGE=50
+      - FEATURED_CONTENT_LIMIT=10
+      - TRENDING_CONTENT_LIMIT=20
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    networks:
+      - videa-mozi-network
+    volumes:
+      - ./services/content-service:/app
+      - /app/node_modules
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3003/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Social Service - Posts, Comments, Likes, Shares, Followers
+  social-service:
+    build:
+      context: ./services/social-service
+      dockerfile: Dockerfile
+    ports:
+      - '3004:3004'
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/videa_mozi_social
+      - REDIS_URL=redis://redis:6379
+      - USER_SERVICE_URL=http://user-service:3002
+      - CONTENT_SERVICE_URL=http://content-service:3003
+    depends_on:
+      - postgres
+      - redis
+      - user-service
+      - content-service
+    networks:
+      - videa-mozi-network
+    volumes:
+      - ./services/social-service:/app
+      - /app/node_modules
+
+  # Moderation Service - Reports & Content Moderation
+  moderation-service:
+    build:
+      context: ./services/moderation-service
+      dockerfile: Dockerfile
+    ports:
+      - '3005:3005'
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/videa_mozi_moderation
+      - REDIS_URL=redis://redis:6379
+      - USER_SERVICE_URL=http://user-service:3002
+      - SOCIAL_SERVICE_URL=http://social-service:3004
+    depends_on:
+      - postgres
+      - redis
+      - user-service
+      - social-service
+    networks:
+      - videa-mozi-network
+    volumes:
+      - ./services/moderation-service:/app
+      - /app/node_modules
+
+  # Media Service - Image & File Management
+  media-service:
+    build:
+      context: ./services/media-service
+      dockerfile: Dockerfile
+    ports:
+      - '3006:3006'
+    environment:
+      - NODE_ENV=development
+      - REDIS_URL=redis://redis:6379
+      - UPLOAD_PATH=/app/uploads
+    depends_on:
+      - redis
+    networks:
+      - videa-mozi-network
+    volumes:
+      - ./services/media-service:/app
+      - /app/node_modules
+      - ./uploads:/app/uploads
+
+  # Monitoring Service - Centralized Monitoring
+  monitoring-service:
+    build:
+      context: ./services/monitoring-service
+      dockerfile: Dockerfile
+    ports:
+      - '3007:3007'
+    environment:
+      - NODE_ENV=development
+      - REDIS_URL=redis://redis:6379
+      - RETENTION_HOURS=24
+    depends_on:
+      - redis
+    networks:
+      - videa-mozi-network
+    volumes:
+      - ./services/monitoring-service:/app
+      - /app/node_modules
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - '5432:5432'
+    environment:
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=videa_mozi
+    networks:
+      - videa-mozi-network
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis Cache & Message Queue
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    networks:
+      - videa-mozi-network
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # RabbitMQ Message Queue (for inter-service communication)
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    ports:
+      - '5672:5672'
+      - '15672:15672'
+    environment:
+      - RABBITMQ_DEFAULT_USER=admin
+      - RABBITMQ_DEFAULT_PASS=password
+    networks:
+      - videa-mozi-network
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  # Elasticsearch (for search functionality)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    ports:
+      - '9200:9200'
+      - '9300:9300'
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - 'ES_JAVA_OPTS=-Xms512m -Xmx512m'
+    networks:
+      - videa-mozi-network
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+
+  # Kibana (for Elasticsearch visualization)
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    ports:
+      - '5601:5601'
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    depends_on:
+      - elasticsearch
+    networks:
+      - videa-mozi-network
+
+networks:
+  videa-mozi-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+  elasticsearch_data:

@@ -1,0 +1,158 @@
+# Social Service GraphQL Schema
+
+# Enums
+enum PostType {
+  TEXT
+  IMAGE
+  VIDEO
+  LINK
+}
+
+enum NotificationType {
+  LIKE
+  COMMENT
+  FOLLOW
+  SHARE
+  MENTION
+}
+
+# Types
+type Post {
+  id: ID!
+  authorId: ID!
+  content: String!
+  type: PostType!
+  mediaUrls: [String!]
+  tags: [String!]
+  isRepost: Boolean!
+  originalPostId: ID
+  likesCount: Int!
+  commentsCount: Int!
+  sharesCount: Int!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type Comment {
+  id: ID!
+  postId: ID!
+  authorId: ID!
+  content: String!
+  parentCommentId: ID
+  likesCount: Int!
+  repliesCount: Int!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type Like {
+  id: ID!
+  userId: ID!
+  postId: ID
+  commentId: ID
+  createdAt: DateTime!
+}
+
+type Share {
+  id: ID!
+  userId: ID!
+  postId: ID!
+  createdAt: DateTime!
+}
+
+type Follower {
+  id: ID!
+  followerId: ID!
+  followingId: ID!
+  createdAt: DateTime!
+}
+
+type Notification {
+  id: ID!
+  userId: ID!
+  actorId: ID!
+  type: NotificationType!
+  message: String!
+  isRead: Boolean!
+  postId: ID
+  commentId: ID
+  createdAt: DateTime!
+}
+
+# Input Types
+input CreatePostInput {
+  content: String!
+  type: PostType!
+  mediaUrls: [String!]
+  tags: [String!]
+}
+
+input UpdatePostInput {
+  content: String
+  tags: [String!]
+}
+
+input CreateCommentInput {
+  postId: ID!
+  content: String!
+  parentCommentId: ID
+}
+
+# Queries
+type Query {
+  # Posts
+  posts(limit: Int = 20, offset: Int = 0): [Post!]!
+  post(id: ID!): Post
+  userPosts(userId: ID!, limit: Int = 20, offset: Int = 0): [Post!]!
+  feed(limit: Int = 20, offset: Int = 0): [Post!]!
+
+  # Comments
+  comments(postId: ID!, limit: Int = 20, offset: Int = 0): [Comment!]!
+  comment(id: ID!): Comment
+
+  # Likes
+  likes(postId: ID, commentId: ID): [Like!]!
+  userLikes(userId: ID!): [Like!]!
+
+  # Followers
+  followers(userId: ID!): [Follower!]!
+  following(userId: ID!): [Follower!]!
+  followStatus(followerId: ID!, followingId: ID!): Boolean!
+
+  # Notifications
+  notifications(limit: Int = 20, offset: Int = 0): [Notification!]!
+  unreadNotificationsCount: Int!
+}
+
+# Mutations
+type Mutation {
+  # Posts
+  createPost(input: CreatePostInput!): Post!
+  updatePost(id: ID!, input: UpdatePostInput!): Post!
+  deletePost(id: ID!): Boolean!
+
+  # Comments
+  createComment(input: CreateCommentInput!): Comment!
+  updateComment(id: ID!, content: String!): Comment!
+  deleteComment(id: ID!): Boolean!
+
+  # Likes
+  likePost(postId: ID!): Like!
+  unlikePost(postId: ID!): Boolean!
+  likeComment(commentId: ID!): Like!
+  unlikeComment(commentId: ID!): Boolean!
+
+  # Shares
+  sharePost(postId: ID!): Share!
+
+  # Followers
+  followUser(userId: ID!): Follower!
+  unfollowUser(userId: ID!): Boolean!
+
+  # Notifications
+  markNotificationAsRead(id: ID!): Boolean!
+  markAllNotificationsAsRead: Boolean!
+}
+
+# Scalar types
+scalar DateTime

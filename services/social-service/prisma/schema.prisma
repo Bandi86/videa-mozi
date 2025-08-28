@@ -1,0 +1,381 @@
+// Prisma schema for Social Service
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Posts table - Main social content
+model Posts {
+  id          String   @id @default(cuid())
+  authorId    String   // User ID from User Service
+  title       String?
+  content     String
+  type        PostType @default(TEXT) // TEXT, IMAGE, VIDEO, LINK, POLL
+  visibility  Visibility @default(PUBLIC) // PUBLIC, FRIENDS, PRIVATE
+
+  // Media attachments
+  mediaUrls   String[] // Array of media URLs
+  thumbnailUrl String?
+
+  // Content metadata
+  tags        String[] // Hashtags and mentions
+  mentions    String[] // Mentioned user IDs
+  location    String?
+
+  // Engagement metrics
+  likesCount      Int      @default(0)
+  commentsCount   Int      @default(0)
+  sharesCount     Int      @default(0)
+  viewsCount      Int      @default(0)
+
+  // Status
+  isPinned    Boolean  @default(false)
+  isEdited    Boolean  @default(false)
+  isDeleted   Boolean  @default(false)
+
+  // Content references (for shares and replies)
+  originalPostId String? // For shares/reposts
+  replyToId      String? // For replies
+  threadId       String? // For thread organization
+
+  // Metadata
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  publishedAt DateTime?
+
+  // Relations
+  author      Users    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  likes       Likes[]
+  comments    Comments[]
+  shares      Shares[]
+
+  // Self-referencing relations
+  originalPost Posts?   @relation("PostShares", fields: [originalPostId], references: [id])
+  sharedPosts  Posts[]  @relation("PostShares")
+  replyTo      Posts?   @relation("PostReplies", fields: [replyToId], references: [id])
+  replies      Posts[]  @relation("PostReplies")
+  thread       Posts?   @relation("PostThreads", fields: [threadId], references: [id])
+  threadPosts  Posts[]  @relation("PostThreads")
+
+  @@index([authorId])
+  @@index([type])
+  @@index([visibility])
+  @@index([isPinned])
+  @@index([isDeleted])
+  @@index([createdAt])
+  @@index([originalPostId])
+  @@index([replyToId])
+  @@index([threadId])
+  @@index([tags])
+}
+
+// Comments table
+model Comments {
+  id          String   @id @default(cuid())
+  postId      String
+  authorId    String   // User ID from User Service
+  content     String
+  type        CommentType @default(TEXT)
+
+  // Media attachments
+  mediaUrls   String[]
+
+  // Threading (nested comments)
+  parentId    String?
+  depth       Int      @default(0)
+  path        String   // Materialized path for efficient querying
+
+  // Engagement
+  likesCount  Int      @default(0)
+  repliesCount Int     @default(0)
+
+  // Status
+  isEdited    Boolean  @default(false)
+  isDeleted   Boolean  @default(false)
+
+  // Metadata
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  post        Posts    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author      Users    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  likes       Likes[]
+  replies     Comments[] @relation("CommentReplies")
+  parent      Comments?  @relation("CommentReplies", fields: [parentId], references: [id])
+
+  @@index([postId])
+  @@index([authorId])
+  @@index([parentId])
+  @@index([depth])
+  @@index([path])
+  @@index([isDeleted])
+  @@index([createdAt])
+}
+
+// Likes table
+model Likes {
+  id        String   @id @default(cuid())
+  userId    String   // User ID from User Service
+  postId    String?  // Like on a post
+  commentId String?  // Like on a comment
+
+  type      LikeType @default(LIKE) // LIKE, LOVE, LAUGH, ANGRY, SAD
+  reaction  String?  // Custom reaction emoji
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  user     Users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post     Posts?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment  Comments? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@unique([userId, commentId])
+  @@index([postId])
+  @@index([commentId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// Shares table
+model Shares {
+  id          String   @id @default(cuid())
+  userId      String   // User ID from User Service
+  postId      String
+  shareType   ShareType @default(SHARE) // SHARE, REPOST, QUOTE
+
+  // For quote shares
+  quoteText   String?
+  quoteMedia  String[]
+
+  createdAt   DateTime @default(now())
+
+  // Relations
+  user        Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post        Posts    @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([postId])
+  @@index([shareType])
+  @@index([createdAt])
+}
+
+// Followers table
+model Followers {
+  id          String   @id @default(cuid())
+  followerId  String   // User who is following
+  followingId String   // User being followed
+
+  status      FollowStatus @default(PENDING) // PENDING, ACCEPTED, BLOCKED
+  followType  FollowType @default(FOLLOW) // FOLLOW, MUTUAL
+
+  // Request message for private accounts
+  requestMessage String?
+
+  createdAt   DateTime @default(now())
+  acceptedAt  DateTime?
+
+  // Relations
+  follower    Users    @relation("UserFollowers", fields: [followerId], references: [id], onDelete: Cascade)
+  following   Users    @relation("UserFollowing", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+  @@index([status])
+  @@index([followType])
+  @@index([createdAt])
+}
+
+// Users table (minimal - will sync from User Service)
+model Users {
+  id            String    @id @default(cuid())
+  username      String    @unique
+  displayName   String?
+  avatarUrl     String?
+  bio           String?
+  isVerified    Boolean   @default(false)
+  isPrivate     Boolean   @default(false)
+  isActive      Boolean   @default(true)
+
+  // Social stats
+  followersCount Int      @default(0)
+  followingCount Int      @default(0)
+  postsCount     Int      @default(0)
+
+  // Metadata
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastActiveAt  DateTime?
+
+  // Relations
+  posts         Posts[]
+  likes         Likes[]
+  comments      Comments[]
+  shares        Shares[]
+  followers     Followers[] @relation("UserFollowers")
+  following     Followers[] @relation("UserFollowing")
+  sentNotifications     Notifications[] @relation("notificationActor")
+  receivedNotifications Notifications[] @relation("notificationUser")
+  sentActivities         ActivityFeed[]  @relation("activityActor")
+  receivedActivities     ActivityFeed[]  @relation("activityUser")
+
+  @@index([username])
+  @@index([isVerified])
+  @@index([isPrivate])
+  @@index([isActive])
+  @@index([lastActiveAt])
+}
+
+// Notifications table
+model Notifications {
+  id        String   @id @default(cuid())
+  userId    String   // Recipient user ID
+  actorId   String   // User who performed the action
+
+  type      NotificationType // LIKE, COMMENT, FOLLOW, SHARE, MENTION
+  title     String
+  content   String
+
+  // Related entities
+  postId    String?
+  commentId String?
+
+  // Status
+  isRead    Boolean  @default(false)
+  isDeleted Boolean  @default(false)
+
+  // Metadata
+  createdAt DateTime @default(now())
+
+  // Relations
+  user      Users    @relation("notificationUser", fields: [userId], references: [id], onDelete: Cascade)
+  actor     Users    @relation("notificationActor", fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([actorId])
+  @@index([type])
+  @@index([isRead])
+  @@index([isDeleted])
+  @@index([createdAt])
+  @@index([postId])
+  @@index([commentId])
+}
+
+// Activity Feed table
+model ActivityFeed {
+  id          String   @id @default(cuid())
+  userId      String   // User whose feed this belongs to
+  actorId     String   // User who performed the action
+
+  type        ActivityType // POST, LIKE, COMMENT, FOLLOW, SHARE
+  action      String   // created, liked, commented, followed, shared
+
+  // Related entities
+  postId      String?
+  commentId   String?
+  targetUserId String? // For follow activities
+
+  // Content preview
+  content     String?
+  mediaUrl    String?
+
+  // Metadata
+  createdAt   DateTime @default(now())
+  score       Float    @default(1.0) // For feed ranking
+
+  // Relations
+  user        Users    @relation("activityUser", fields: [userId], references: [id], onDelete: Cascade)
+  actor       Users    @relation("activityActor", fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([actorId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([score])
+  @@index([postId])
+  @@index([commentId])
+}
+
+// Hashtags table for trending
+model Hashtags {
+  id        String   @id @default(cuid())
+  tag       String   @unique
+  count     Int      @default(0)
+  lastUsed  DateTime @default(now())
+
+  @@index([tag])
+  @@index([count])
+  @@index([lastUsed])
+}
+
+// Enums
+enum PostType {
+  TEXT
+  IMAGE
+  VIDEO
+  LINK
+  POLL
+}
+
+enum Visibility {
+  PUBLIC
+  FRIENDS
+  PRIVATE
+}
+
+enum CommentType {
+  TEXT
+  IMAGE
+  GIF
+}
+
+enum LikeType {
+  LIKE
+  LOVE
+  LAUGH
+  ANGRY
+  SAD
+  WOW
+}
+
+enum ShareType {
+  SHARE
+  REPOST
+  QUOTE
+}
+
+enum FollowStatus {
+  PENDING
+  ACCEPTED
+  BLOCKED
+}
+
+enum FollowType {
+  FOLLOW
+  MUTUAL
+}
+
+enum NotificationType {
+  LIKE
+  COMMENT
+  FOLLOW
+  SHARE
+  MENTION
+  REPLY
+  QUOTE
+}
+
+enum ActivityType {
+  POST
+  LIKE
+  COMMENT
+  FOLLOW
+  SHARE
+  MENTION
+}

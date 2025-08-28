@@ -1,0 +1,277 @@
+# GraphQL schema for User Service
+
+type User {
+  id: ID!
+  email: String!
+  username: String!
+  displayName: String
+  firstName: String
+  lastName: String
+  bio: String
+  website: String
+  location: String
+  gender: Gender
+  dateOfBirth: String
+  avatarUrl: String
+  coverImageUrl: String
+  role: UserRole!
+  status: UserStatus!
+  visibility: AccountVisibility!
+  isPrivate: Boolean!
+  isEmailVerified: Boolean!
+  followersCount: Int!
+  followingCount: Int!
+  postsCount: Int!
+  createdAt: String!
+  updatedAt: String!
+  lastLoginAt: String
+  lastActiveAt: String
+}
+
+type AuthSession {
+  id: ID!
+  deviceInfo: String
+  ipAddress: String
+  userAgent: String
+  createdAt: String!
+  lastUsedAt: String
+  expiresAt: String!
+  isActive: Boolean!
+}
+
+type UserPreference {
+  id: ID!
+  theme: String!
+  language: String!
+  timezone: String!
+  dateFormat: String!
+  timeFormat: String!
+  emailNotifications: Boolean!
+  pushNotifications: Boolean!
+  smsNotifications: Boolean!
+  marketingEmails: Boolean!
+  profileVisibility: AccountVisibility!
+  activityVisibility: AccountVisibility!
+  showEmail: Boolean!
+  showLocation: Boolean!
+  allowDataCollection: Boolean!
+  createdAt: String!
+  updatedAt: String!
+}
+
+type Follow {
+  id: ID!
+  followerId: String!
+  followingId: String!
+  status: String!
+  followType: String!
+  createdAt: String!
+  follower: User!
+  following: User!
+}
+
+type UserSearchResult {
+  data: [User!]!
+  pagination: Pagination!
+}
+
+type UserSessionsResult {
+  sessions: [AuthSession!]!
+}
+
+type UserStats {
+  total: Int!
+  active: Int!
+  verified: Int!
+  byRole: JSONObject!
+  byStatus: JSONObject!
+}
+
+type Pagination {
+  page: Int!
+  limit: Int!
+  total: Int!
+  pages: Int!
+}
+
+# Input types
+input CreateUserInput {
+  email: String!
+  username: String!
+  password: String!
+  firstName: String
+  lastName: String
+  displayName: String
+  bio: String
+  website: String
+  location: String
+  gender: Gender
+  dateOfBirth: String
+  role: UserRole
+  status: UserStatus
+  visibility: AccountVisibility
+  isPrivate: Boolean
+}
+
+input UpdateUserInput {
+  firstName: String
+  lastName: String
+  displayName: String
+  bio: String
+  website: String
+  location: String
+  gender: Gender
+  dateOfBirth: String
+  avatarUrl: String
+  coverImageUrl: String
+  visibility: AccountVisibility
+  isPrivate: Boolean
+  allowMessages: Boolean
+  allowTagging: Boolean
+  showOnlineStatus: Boolean
+}
+
+input UserFilters {
+  role: UserRole
+  status: UserStatus
+  visibility: AccountVisibility
+  isPrivate: Boolean
+  isEmailVerified: Boolean
+  gender: Gender
+  dateFrom: String
+  dateTo: String
+  search: String
+}
+
+input PaginationInput {
+  page: Int
+  limit: Int
+  sortBy: String
+  sortOrder: String
+}
+
+input UpdateUserPreferencesInput {
+  theme: String
+  language: String
+  timezone: String
+  dateFormat: String
+  timeFormat: String
+  emailNotifications: Boolean
+  pushNotifications: Boolean
+  smsNotifications: Boolean
+  marketingEmails: Boolean
+  profileVisibility: AccountVisibility
+  activityVisibility: AccountVisibility
+  showEmail: Boolean
+  showLocation: Boolean
+  allowDataCollection: Boolean
+}
+
+# Enums
+enum UserRole {
+  USER
+  ADMIN
+  MODERATOR
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+  PENDING_VERIFICATION
+  DELETED
+}
+
+enum AccountVisibility {
+  PUBLIC
+  FRIENDS_ONLY
+  PRIVATE
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+# Scalars
+scalar JSONObject
+
+# Queries
+type Query {
+  # Get current user (requires authentication)
+  me: User!
+
+  # Get user by ID
+  user(id: ID!): User
+
+  # Get user by username
+  userByUsername(username: String!): User
+
+  # Search users
+  searchUsers(query: String!, pagination: PaginationInput): UserSearchResult!
+
+  # Get users with filters
+  users(filters: UserFilters, pagination: PaginationInput): UserSearchResult!
+
+  # Get user followers
+  userFollowers(userId: String!, pagination: PaginationInput): UserSearchResult!
+
+  # Get users followed by user
+  userFollowing(userId: String!, pagination: PaginationInput): UserSearchResult!
+
+  # Get follow status between users
+  followStatus(followerId: String!, followingId: String!): JSONObject!
+
+  # Get user preferences
+  userPreferences(userId: String!): UserPreference
+
+  # Get user sessions
+  userSessions: UserSessionsResult!
+
+  # Get user statistics (admin only)
+  userStats(dateFrom: String, dateTo: String): UserStats!
+}
+
+# Mutations
+type Mutation {
+  # Update current user profile
+  updateProfile(input: UpdateUserInput!): User!
+
+  # Update user preferences
+  updateUserPreferences(input: UpdateUserPreferencesInput!): UserPreference!
+
+  # Follow a user
+  followUser(followingId: String!): Follow!
+
+  # Unfollow a user
+  unfollowUser(followingId: String!): Boolean!
+
+  # Revoke a user session
+  revokeSession(sessionId: ID!): Boolean!
+
+  # Revoke all user sessions
+  revokeAllSessions: Boolean!
+
+  # Admin: Update user (admin only)
+  adminUpdateUser(userId: String!, input: UpdateUserInput!): User!
+
+  # Admin: Delete user (admin only)
+  adminDeleteUser(userId: String!): Boolean!
+}
+
+# Subscriptions
+type Subscription {
+  # User status changes (online/offline)
+  userStatus(userId: String!): JSONObject!
+
+  # Profile updates
+  profileUpdates(userId: String!): User!
+
+  # Follow/unfollow events
+  followEvents(userId: String!): JSONObject!
+
+  # Typing indicators
+  typingIndicators(chatId: String!): JSONObject!
+}

@@ -1,0 +1,318 @@
+// Prisma schema for User Service
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  MODERATOR
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+  PENDING_VERIFICATION
+  DELETED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum AccountVisibility {
+  PUBLIC
+  FRIENDS_ONLY
+  PRIVATE
+}
+
+// Main Users table
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  username      String   @unique
+  displayName   String?
+  firstName     String?
+  lastName      String?
+  password      String
+  role          UserRole @default(USER)
+  status        UserStatus @default(ACTIVE)
+  visibility    AccountVisibility @default(PUBLIC)
+
+  // Profile information
+  bio           String?
+  website       String?
+  location      String?
+  gender        Gender?
+  dateOfBirth   DateTime?
+  avatarUrl     String?
+  coverImageUrl String?
+
+  // Social stats (denormalized for performance)
+  followersCount    Int      @default(0)
+  followingCount    Int      @default(0)
+  postsCount        Int      @default(0)
+  likesReceivedCount Int    @default(0)
+
+  // Email verification
+  isEmailVerified   Boolean  @default(false)
+  emailVerificationToken String?
+  emailVerificationExpires DateTime?
+
+  // Password reset
+  passwordResetToken String?
+  passwordResetExpires DateTime?
+
+  // Privacy settings
+  isPrivate         Boolean  @default(false)
+  allowMessages     Boolean  @default(true)
+  allowTagging      Boolean  @default(true)
+  showOnlineStatus  Boolean  @default(true)
+
+  // Metadata
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  lastLoginAt       DateTime?
+  lastActiveAt      DateTime?
+  deletedAt         DateTime?
+
+  // Relations
+  authSessions      AuthSession[]
+  passwordResets    PasswordReset[]
+  userPreferences   UserPreference[]
+  followers         Follow[] @relation("UserFollowers")
+  following         Follow[] @relation("UserFollowing")
+  blockedUsers      Block[] @relation("UserBlocked")
+  blockedByUsers    Block[] @relation("UserBlockedBy")
+  reportsSent       Report[] @relation("ReportReporter")
+  reportsReceived   Report[] @relation("ReportReported")
+
+  // Service-specific relations (for cross-service data)
+  socialProfile     SocialProfile?
+  moderationProfile ModerationProfile?
+
+  @@index([email])
+  @@index([username])
+  @@index([role])
+  @@index([status])
+  @@index([isEmailVerified])
+  @@index([createdAt])
+  @@index([lastActiveAt])
+  @@index([emailVerificationToken])
+  @@index([passwordResetToken])
+}
+
+// Authentication sessions
+model AuthSession {
+  id            String   @id @default(cuid())
+  userId        String
+  accessToken   String   @unique
+  refreshToken  String   @unique
+  deviceInfo    Json?    // Device and browser information
+  ipAddress     String?
+  userAgent     String?
+  expiresAt     DateTime
+  refreshExpiresAt DateTime
+  isActive      Boolean  @default(true)
+  lastUsedAt    DateTime?
+  createdAt     DateTime @default(now())
+
+  // Relations
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([accessToken])
+  @@index([refreshToken])
+  @@index([expiresAt])
+  @@index([isActive])
+}
+
+// User preferences
+model UserPreference {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  theme     String   @default("light") // light, dark, auto
+  language  String   @default("en")
+  timezone  String   @default("UTC")
+  dateFormat String  @default("MM/DD/YYYY")
+  timeFormat String  @default("12h") // 12h, 24h
+
+  // Notification preferences
+  emailNotifications    Boolean  @default(true)
+  pushNotifications     Boolean  @default(true)
+  smsNotifications      Boolean  @default(false)
+  marketingEmails       Boolean  @default(false)
+
+  // Privacy preferences
+  profileVisibility     AccountVisibility @default(PUBLIC)
+  activityVisibility    AccountVisibility @default(FRIENDS_ONLY)
+  showEmail             Boolean  @default(false)
+  showLocation          Boolean  @default(true)
+  allowDataCollection   Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Follow relationships
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  followingId String
+  status      String   @default("ACCEPTED") // PENDING, ACCEPTED, BLOCKED
+  createdAt   DateTime @default(now())
+
+  // Relations
+  follower    User     @relation("UserFollowers", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("UserFollowing", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// Block relationships
+model Block {
+  id          String   @id @default(cuid())
+  blockerId   String
+  blockedId   String
+  reason      String?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  blocker     User     @relation("UserBlocked", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked     User     @relation("UserBlockedBy", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
+  @@index([createdAt])
+}
+
+// Reports (for user moderation)
+model Report {
+  id            String   @id @default(cuid())
+  reporterId    String
+  reportedUserId String
+  contentId     String?  // Can report content or users
+  contentType   String?  // POST, COMMENT, etc.
+  type          String   // SPAM, HARASSMENT, etc.
+  status        String   @default("PENDING")
+  reason        String
+  description   String?
+  reviewedBy    String?
+  reviewedAt    DateTime?
+  resolution    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  reporter      User     @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedUser  User     @relation("ReportReported", fields: [reportedUserId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([type])
+  @@index([reporterId])
+  @@index([reportedUserId])
+  @@index([createdAt])
+}
+
+// Social profile data (for cross-service sync)
+model SocialProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  bio         String?
+  website     String?
+  location    String?
+  avatarUrl   String?
+  coverImageUrl String?
+  followersCount Int   @default(0)
+  followingCount Int   @default(0)
+  postsCount    Int    @default(0)
+  isVerified    Boolean @default(false)
+  isPrivate     Boolean @default(false)
+  lastSyncAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([lastSyncAt])
+}
+
+// Moderation profile data (for cross-service sync)
+model ModerationProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  trustScore      Float    @default(1.0)
+  warningCount    Int      @default(0)
+  suspensionCount Int      @default(0)
+  banCount        Int      @default(0)
+  lastWarningAt   DateTime?
+  lastSuspensionAt DateTime?
+  lastBanAt       DateTime?
+  isModerator     Boolean  @default(false)
+  isAdmin         Boolean  @default(false)
+  moderatorLevel  Int      @default(0)
+  lastSyncAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([trustScore])
+  @@index([isModerator])
+  @@index([lastSyncAt])
+}
+
+// Email verification codes
+model EmailVerification {
+  id        String   @id @default(cuid())
+  email     String
+  code      String   @unique
+  expiresAt DateTime
+  isUsed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@index([code])
+  @@index([expiresAt])
+  @@index([isUsed])
+}
+
+// Password reset codes
+model PasswordReset {
+  id        String   @id @default(cuid())
+  userId    String
+  code      String   @unique
+  expiresAt DateTime
+  isUsed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([code])
+  @@index([expiresAt])
+  @@index([isUsed])
+}

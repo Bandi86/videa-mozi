@@ -20,24 +20,458 @@ enum Roles {
 }
 
 model Users {
-  id       Int    @id @default(autoincrement())
-  email    String @unique
-  username String @unique
-  password String @unique
-  roles    Roles  @default(USER)
-  Auth     Auth[]
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  id          Int    @id @default(autoincrement())
+  email       String @unique
+  username    String @unique
+  password    String
+  roles       Roles  @default(USER)
+  isEmailVerified Boolean @default(false)
+  profilePicture String? // Profile picture URL
+  bio         String? // User bio/description
+  Auth        Auth[]
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  // Social Relations
+  posts         Posts[]
+  comments      Comments[]
+  likes         Likes[]
+  followers     Followers[] @relation("UserFollowers")
+  following     Followers[] @relation("UserFollowing")
+  shares        Shares[]
+  reportsSent   Reports[]   @relation("ReportReporter")
+  reportsReceived Reports[] @relation("ReportReportedUser")
+  reportsReviewed Reports[] @relation("ReportReviewer")
+
+  // Content relations
+  createdContent Content[]   @relation("ContentCreator")
+  updatedContent Content[]   @relation("ContentUpdater")
+  deletedContent Content[]   @relation("ContentDeleter")
+  contentLikes   ContentLikes[]
+  contentComments ContentComments[]
+  contentCommentLikes ContentCommentLikes[]
+  contentShares  ContentShares[]
+  contentReportsSent ContentReports[] @relation("ContentReportReporter")
+  contentReportsReviewed ContentReports[] @relation("ContentReportReviewer")
+
+  @@index([roles]) // For admin user queries
+  @@index([created_at]) // For user statistics and recent users
+  @@index([isEmailVerified]) // For email verification queries
+
+  @@map("users")
 }
 
 model Auth {
   id        Int      @id @default(autoincrement())
-  token     String   @unique
+  accessToken String @unique
+  refreshToken String @unique
   expiresAt DateTime
+  refreshExpiresAt DateTime
   userId    Int
   users     Users    @relation(fields: [userId], references: [id])
   isOnline  Boolean  @default(false)
-  isVerified Boolean  @default(false)
   lastSeen   DateTime
-  passwordResetTime DateTime
+  passwordResetToken String?
+  passwordResetExpires DateTime?
+  emailVerificationToken String?
+  emailVerificationExpires DateTime?
+
+  @@index([accessToken]) // For token validation
+  @@index([refreshToken]) // For refresh token validation
+  @@index([expiresAt]) // For cleanup expired tokens
+  @@index([passwordResetToken]) // For password reset
+  @@index([emailVerificationToken]) // For email verification
+
+  @@map("auth")
 }
+
+// Social Features Models
+
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ReportType {
+  SPAM
+  HARASSMENT
+  INAPPROPRIATE_CONTENT
+  COPYRIGHT_VIOLATION
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  RESOLVED
+  DISMISSED
+}
+
+model Categories {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  // Relations
+  posts       Posts[]
+
+  @@map("categories")
+}
+
+model Tags {
+  id         Int      @id @default(autoincrement())
+  name       String   @unique
+  created_at DateTime @default(now())
+
+  // Relations
+  posts      Posts[]
+
+  @@map("tags")
+}
+
+model Posts {
+  id          Int        @id @default(autoincrement())
+  title       String
+  content     String
+  status      PostStatus @default(DRAFT)
+  authorId    Int
+  categoryId  Int?
+  imageUrl    String?    // Main post image
+  images      String[]   // Multiple images (stored as JSON array)
+  created_at  DateTime   @default(now())
+  updated_at  DateTime   @updatedAt
+
+  // Relations
+  author      Users      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  category    Categories? @relation(fields: [categoryId], references: [id])
+  tags        Tags[]
+  comments    Comments[]
+  likes       Likes[]
+  shares      Shares[]
+  reports     Reports[]
+
+  @@index([authorId]) // Posts by author
+  @@index([categoryId]) // Posts by category
+  @@index([status]) // Post status filtering
+  @@index([created_at]) // Time-based sorting
+  @@index([status, created_at]) // Published posts by time
+
+  @@map("posts")
+}
+
+model Comments {
+  id         Int      @id @default(autoincrement())
+  content    String
+  postId     Int
+  authorId   Int
+  parentId   Int?     // For nested comments
+  imageUrl   String?  // Comment image
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relations
+  post       Posts     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author     Users     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent     Comments? @relation("CommentReplies", fields: [parentId], references: [id])
+  replies    Comments[] @relation("CommentReplies")
+  likes      Likes[]
+  reports    Reports[]
+
+  @@index([postId]) // Comments by post
+  @@index([authorId]) // Comments by author
+  @@index([parentId]) // Nested comment queries
+  @@index([created_at]) // Time-based sorting
+
+  @@map("comments")
+}
+
+model Likes {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  postId     Int?
+  commentId  Int?
+  created_at DateTime @default(now())
+
+  // Relations
+  user       Users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post       Posts?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment    Comments? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  // Ensure only one like per user per post/comment
+  @@unique([userId, postId])
+  @@unique([userId, commentId])
+  @@map("likes")
+}
+
+model Followers {
+  id          Int      @id @default(autoincrement())
+  followerId  Int
+  followingId Int
+  created_at  DateTime @default(now())
+
+  // Relations
+  follower    Users    @relation("UserFollowers", fields: [followerId], references: [id], onDelete: Cascade)
+  following   Users    @relation("UserFollowing", fields: [followingId], references: [id], onDelete: Cascade)
+
+  // Prevent self-following and duplicate follows
+  @@unique([followerId, followingId])
+
+  @@map("followers")
+}
+
+model Shares {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  postId     Int
+  created_at DateTime @default(now())
+
+  // Relations
+  user       Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post       Posts    @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  // Ensure only one share per user per post
+  @@unique([userId, postId])
+  @@map("shares")
+}
+
+model Reports {
+  id          Int          @id @default(autoincrement())
+  reporterId  Int
+  postId      Int?
+  commentId   Int?
+  reportedUserId Int?
+  type        ReportType
+  status      ReportStatus @default(PENDING)
+  reason      String
+  description String?
+  reviewedBy  Int?
+  reviewed_at DateTime?
+  created_at  DateTime    @default(now())
+  updated_at  DateTime    @updatedAt
+
+  // Relations
+  reporter    Users        @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  post        Posts?       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment     Comments?    @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  reportedUser Users?      @relation("ReportReportedUser", fields: [reportedUserId], references: [id], onDelete: Cascade)
+  reviewer    Users?       @relation("ReportReviewer", fields: [reviewedBy], references: [id])
+
+  @@index([status]) // Report status filtering
+  @@index([type]) // Report type filtering
+  @@index([reporterId]) // Reports by reporter
+  @@index([reviewedBy]) // Reports by reviewer
+  @@index([created_at]) // Time-based sorting
+
+  @@map("reports")
+}
+
+// Content Management Models
+
+enum ContentType {
+  MOVIE
+  SERIES
+}
+
+enum ContentStatus {
+  ACTIVE
+  INACTIVE
+  DELETED
+}
+
+enum StreamingPlatform {
+  NETFLIX
+  HULU
+  AMAZON_PRIME
+  HBO_MAX
+  SHOWTIME
+  STARZ
+  HGTV
+  DISCOVERY_PLUS
+  PEACOCK
+  APPLE_TV
+  DISNEY_PLUS
+  YOUTUBE
+  OTHER
+}
+
+model Content {
+  id                String            @id @default(uuid())
+  title             String
+  description       String
+  image             String?
+  trailer           String?
+  rating            Float?
+  releaseDate       DateTime?
+  genre             String
+  type              ContentType
+  duration          Int?             // in minutes for movies, average episode length for series
+  language          String
+  country           String
+  status            ContentStatus     @default(ACTIVE)
+
+  // User tracking
+  createdBy         Int
+  updatedBy         Int?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  deletedAt         DateTime?
+  deletedBy         Int?
+
+  // Content flags
+  isFeatured        Boolean           @default(false)
+  isTrending        Boolean           @default(false)
+  isNew             Boolean           @default(false)
+  isPopular         Boolean           @default(false)
+  isTopRated        Boolean           @default(false)
+  isUpcoming        Boolean           @default(false)
+  isNowPlaying      Boolean           @default(false)
+  isComingSoon      Boolean           @default(false)
+  isInTheaters      Boolean           @default(false)
+
+  // Series-specific fields
+  seasons           Int?             // number of seasons (for series only)
+  episodes          Int?             // total episodes (for series only)
+  episodeDuration   Int?             // average episode duration in minutes (for series only)
+
+  // Streaming availability
+  streamingPlatforms StreamingPlatform[]
+
+  // Relations
+  creator           Users             @relation("ContentCreator", fields: [createdBy], references: [id])
+  updater           Users?            @relation("ContentUpdater", fields: [updatedBy], references: [id])
+  deleter           Users?            @relation("ContentDeleter", fields: [deletedBy], references: [id])
+
+  // Social features relations
+  likes             ContentLikes[]
+  comments          ContentComments[]
+  shares            ContentShares[]
+  reports           ContentReports[]
+
+  // Performance indexes - ordered by query frequency
+  @@index([status]) // Most frequent filter - active content only
+  @@index([type]) // Content type filtering (MOVIE/SERIES)
+  @@index([genre]) // Genre-based filtering
+  @@index([language]) // Language filtering
+  @@index([country]) // Country filtering
+  @@index([rating]) // Rating-based queries
+  @@index([isFeatured]) // Featured content queries
+  @@index([isTrending]) // Trending content queries
+  @@index([isPopular]) // Popular content queries
+  @@index([isTopRated]) // Top rated content queries
+  @@index([createdBy]) // Content by creator
+  @@index([createdAt]) // Time-based sorting
+  @@index([status, type]) // Combined status and type queries
+  @@index([status, isFeatured]) // Featured active content
+  @@index([status, isTrending]) // Trending active content
+  @@index([title]) // Text search on titles
+
+  @@map("content")
+}
+
+// Social features for content
+model ContentLikes {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  contentId String
+  createdAt DateTime @default(now())
+
+  // Relations
+  user      Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  // Ensure only one like per user per content
+  @@unique([userId, contentId])
+  @@map("content_likes")
+}
+
+model ContentComments {
+  id         Int                @id @default(autoincrement())
+  content    String
+  contentId  String
+  authorId   Int
+  parentId   Int?               // For nested comments
+  imageUrl   String?            // Comment image
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  // Relations
+  contentRef Content             @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  author     Users              @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent     ContentComments?   @relation("ContentCommentReplies", fields: [parentId], references: [id])
+  replies    ContentComments[]  @relation("ContentCommentReplies")
+  likes      ContentCommentLikes[]
+  reports    ContentReports[]
+
+  @@index([contentId]) // Comments by content
+  @@index([authorId]) // Comments by author
+  @@index([parentId]) // Nested comment queries
+  @@index([contentId, createdAt]) // Comments sorted by time for content
+  @@index([createdAt]) // Time-based sorting
+
+  @@map("content_comments")
+}
+
+model ContentCommentLikes {
+  id        Int              @id @default(autoincrement())
+  userId    Int
+  commentId Int
+  createdAt DateTime         @default(now())
+
+  // Relations
+  user       Users            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment    ContentComments  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  // Ensure only one like per user per comment
+  @@unique([userId, commentId])
+  @@map("content_comment_likes")
+}
+
+model ContentShares {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  contentId String
+  createdAt DateTime @default(now())
+
+  // Relations
+  user      Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  // Ensure only one share per user per content
+  @@unique([userId, contentId])
+  @@map("content_shares")
+}
+
+model ContentReports {
+  id              Int                    @id @default(autoincrement())
+  reporterId      Int
+  contentId       String?
+  commentId       Int?
+  type            ReportType
+  status          ReportStatus           @default(PENDING)
+  reason          String
+  description     String?
+  reviewedBy      Int?
+  reviewedAt      DateTime?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  // Relations
+  reporter        Users                  @relation("ContentReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  content         Content?               @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  comment         ContentComments?       @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  reviewer        Users?                 @relation("ContentReportReviewer", fields: [reviewedBy], references: [id])
+
+  @@index([status]) // Content report status filtering
+  @@index([type]) // Content report type filtering
+  @@index([reporterId]) // Content reports by reporter
+  @@index([reviewedBy]) // Content reports by reviewer
+  @@index([contentId]) // Content reports by content
+  @@index([createdAt]) // Time-based sorting
+
+  @@map("content_reports")
+}
+
+

@@ -1,0 +1,244 @@
+// Prisma schema for Media Service
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+  ARCHIVE
+  OTHER
+}
+
+enum MediaStatus {
+  UPLOADING
+  PROCESSING
+  COMPLETED
+  FAILED
+  DELETED
+}
+
+enum ProcessingType {
+  THUMBNAIL
+  RESIZE
+  COMPRESS
+  CONVERT
+  WATERMARK
+  CROP
+  OPTIMIZE
+}
+
+enum StorageProvider {
+  LOCAL
+  S3
+  CLOUDINARY
+  CLOUDFLARE_R2
+}
+
+enum AccessLevel {
+  PUBLIC
+  PRIVATE
+  RESTRICTED
+}
+
+// Media files table
+model Media {
+  id            String   @id @default(cuid())
+  filename      String
+  originalName  String
+  mimeType      String
+  size          Int
+  type          MediaType
+  status        MediaStatus @default(UPLOADING)
+  url           String?
+  thumbnailUrl  String?
+  previewUrl    String?
+  storageKey    String   @unique
+  storageProvider StorageProvider @default(LOCAL)
+  bucket        String?
+  region        String?
+  accessLevel   AccessLevel @default(PUBLIC)
+  uploadedBy    String
+  metadata      Json?
+  width         Int?
+  height        Int?
+  duration      Float?   // For video/audio in seconds
+  bitrate       Int?     // For video/audio
+  codec         String?  // Video/audio codec
+  checksum      String?  // File checksum for integrity
+  expiresAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  uploader      User?
+  variants      MediaVariant[]
+  processingJobs ProcessingJob[]
+  accessLogs    MediaAccessLog[]
+
+  @@index([status])
+  @@index([type])
+  @@index([uploadedBy])
+  @@index([storageKey])
+  @@index([createdAt])
+  @@index([expiresAt])
+}
+
+// Media variants (different sizes/formats)
+model MediaVariant {
+  id          String   @id @default(cuid())
+  mediaId     String
+  name        String   // e.g., "thumbnail", "medium", "large"
+  type        MediaType
+  format      String   // e.g., "jpg", "webp", "mp4"
+  width       Int?
+  height      Int?
+  size        Int
+  url         String
+  storageKey  String   @unique
+  storageProvider StorageProvider @default(LOCAL)
+  bucket      String?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  media       Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@index([mediaId])
+  @@index([name])
+  @@unique([mediaId, name])
+}
+
+// Processing jobs queue
+model ProcessingJob {
+  id            String   @id @default(cuid())
+  mediaId       String
+  type          ProcessingType
+  status        String   @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
+  priority      Int      @default(1)
+  config        Json     // Processing configuration
+  result        Json?    // Processing result
+  error         String?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  workerId      String?
+  retryCount    Int      @default(0)
+  maxRetries    Int      @default(3)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  media         Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([type])
+  @@index([priority])
+  @@index([createdAt])
+  @@index([mediaId])
+}
+
+// Media access logs
+model MediaAccessLog {
+  id        String   @id @default(cuid())
+  mediaId   String
+  accessedBy String?
+  ipAddress String?
+  userAgent String?
+  referrer  String?
+  accessedAt DateTime @default(now())
+
+  // Relations
+  media     Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@index([mediaId])
+  @@index([accessedAt])
+  @@index([accessedBy])
+}
+
+// CDN configurations
+model CDNConfig {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  provider    String   // CLOUDFLARE, AWS_CLOUDFRONT, FASTLY, etc.
+  config      Json     // Provider-specific configuration
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive])
+}
+
+// Storage configurations
+model StorageConfig {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  provider    StorageProvider @unique
+  config      Json     // Provider-specific configuration
+  isActive    Boolean  @default(true)
+  maxFileSize Int?     // Max file size in bytes
+  allowedTypes Json?   // Allowed file types
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([provider])
+}
+
+// Upload sessions for resumable uploads
+model UploadSession {
+  id          String   @id @default(cuid())
+  filename    String
+  totalSize   Int
+  uploadedSize Int     @default(0)
+  chunks      Json?    // Uploaded chunks info
+  status      String   @default("ACTIVE") // ACTIVE, COMPLETED, EXPIRED
+  expiresAt   DateTime
+  uploadedBy  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  uploader    User?    @relation(fields: [uploadedBy], references: [id])
+
+  @@index([status])
+  @@index([uploadedBy])
+  @@index([expiresAt])
+}
+
+// Media usage analytics
+model MediaAnalytics {
+  id          String   @id @default(cuid())
+  mediaId     String
+  date        DateTime
+  views       Int      @default(0)
+  downloads   Int      @default(0)
+  bandwidth   Int      @default(0) // Bytes served
+  createdAt   DateTime @default(now())
+
+  // Relations
+  media       Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@index([mediaId])
+  @@index([date])
+  @@unique([mediaId, date])
+}
+
+// User model (simplified for media purposes)
+model User {
+  id        String   @id @default(cuid())
+  username  String?  @unique
+  email     String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  uploads       Media[]
+  uploadSessions UploadSession[]
+}

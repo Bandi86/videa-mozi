@@ -1,0 +1,50 @@
+# Production Environment Variables Template
+# Copy this file to .env.production and fill in your actual values
+
+# Application
+NODE_ENV=production
+PORT=3001
+FRONTEND_URL=http://localhost:3031
+
+# Database
+DATABASE_URL=postgresql://postgres:postgres@postgres:5432/videa_mozi
+
+# Redis (Optional - for session storage and enhanced rate limiting)
+REDIS_URL=redis://redis:6379
+
+# JWT Secrets - Generate strong, unique secrets for production
+JWT_ACCESS_SECRET=your-super-secure-access-secret-key-here-make-it-very-long-and-random
+JWT_REFRESH_SECRET=your-super-secure-refresh-secret-key-here-make-it-very-long-and-random
+JWT_ACCESS_EXPIRE=15m
+JWT_REFRESH_EXPIRE=7d
+
+# Email Configuration (Optional - for email verification and notifications)
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_SECURE=false
+EMAIL_USER=your-email@gmail.com
+EMAIL_PASS=your-app-password
+EMAIL_FROM=your-email@gmail.com
+
+# Logging
+LOG_LEVEL=info
+LOG_REQUEST_BODY=false
+LOG_RESPONSE_BODY=false
+
+# Rate Limiting
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=100
+
+# CORS
+CORS_ORIGIN=http://localhost:3031
+
+# Security
+SESSION_SECRET=your-super-secure-session-secret-key-here
+
+# Monitoring
+ENABLE_METRICS=true
+METRICS_PREFIX=videa_mozi
+
+# SSL/HTTPS (when ready)
+SSL_CERT_PATH=/etc/ssl/certs/videa-mozi.crt
+SSL_KEY_PATH=/etc/ssl/private/videa-mozi.key

@@ -1,0 +1,148 @@
+version: '3.8'
+
+# Development environment overrides
+services:
+  # API Gateway Development
+  api-gateway:
+    environment:
+      - NODE_ENV=development
+      - LOG_LEVEL=debug
+      - FRONTEND_URL=http://localhost:3031
+    volumes:
+      - ./services/api-gateway:/app
+      - /app/node_modules
+    ports:
+      - '3001:3001'
+    command: npm run dev
+
+  # User Service Development
+  user-service:
+    environment:
+      - NODE_ENV=development
+      - LOG_LEVEL=debug
+      - JWT_ACCESS_SECRET=user-service-secret-key
+      - JWT_REFRESH_SECRET=user-service-refresh-key
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/videa_mozi_users
+    volumes:
+      - ./services/user-service:/app
+      - /app/node_modules
+    command: npm run dev
+
+  # Content Service Development
+  content-service:
+    environment:
+      - NODE_ENV=development
+      - LOG_LEVEL=debug
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/videa_mozi_content
+    volumes:
+      - ./services/content-service:/app
+      - /app/node_modules
+    command: npm run dev
+
+  # Social Service Development
+  social-service:
+    environment:
+      - NODE_ENV=development
+      - LOG_LEVEL=debug
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/videa_mozi_social
+      - USER_SERVICE_URL=http://user-service:3002
+      - CONTENT_SERVICE_URL=http://content-service:3003
+    volumes:
+      - ./services/social-service:/app
+      - /app/node_modules
+    command: npm run dev
+
+  # Moderation Service Development
+  moderation-service:
+    environment:
+      - NODE_ENV=development
+      - LOG_LEVEL=debug
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/videa_mozi_moderation
+      - USER_SERVICE_URL=http://user-service:3002
+      - SOCIAL_SERVICE_URL=http://social-service:3004
+    volumes:
+      - ./services/moderation-service:/app
+      - /app/node_modules
+    command: npm run dev
+
+  # Media Service Development
+  media-service:
+    environment:
+      - NODE_ENV=development
+      - LOG_LEVEL=debug
+      - UPLOAD_PATH=/app/uploads
+    volumes:
+      - ./services/media-service:/app
+      - /app/node_modules
+      - ./uploads:/app/uploads
+    command: npm run dev
+
+  # Monitoring Service Development
+  monitoring-service:
+    environment:
+      - NODE_ENV=development
+      - LOG_LEVEL=debug
+      - RETENTION_HOURS=24
+    volumes:
+      - ./services/monitoring-service:/app
+      - /app/node_modules
+    command: npm run dev
+
+  # Database Development
+  postgres:
+    ports:
+      - '5432:5432'
+    environment:
+      - POSTGRES_DB=videa_mozi
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d
+
+  # Redis Development
+  redis:
+    ports:
+      - '6379:6379'
+    command: redis-server --appendonly yes --requirepass ""
+    volumes:
+      - redis_dev_data:/data
+
+  # RabbitMQ Development
+  rabbitmq:
+    ports:
+      - '5672:5672'
+      - '15672:15672'
+    environment:
+      - RABBITMQ_DEFAULT_USER=admin
+      - RABBITMQ_DEFAULT_PASS=password
+    volumes:
+      - rabbitmq_dev_data:/var/lib/rabbitmq
+
+  # Elasticsearch Development
+  elasticsearch:
+    ports:
+      - '9200:9200'
+      - '9300:9300'
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - 'ES_JAVA_OPTS=-Xms512m -Xmx512m'
+      - 'http.cors.enabled=true'
+      - 'http.cors.allow-origin=*'
+      - 'http.cors.allow-headers=X-Requested-With,Content-Type,Content-Length,Authorization'
+    volumes:
+      - elasticsearch_dev_data:/usr/share/elasticsearch/data
+
+  # Kibana Development
+  kibana:
+    ports:
+      - '5601:5601'
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+
+volumes:
+  postgres_dev_data:
+  redis_dev_data:
+  rabbitmq_dev_data:
+  elasticsearch_dev_data:

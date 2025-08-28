@@ -1,0 +1,241 @@
+// Prisma schema for Content Service
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Movies {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  releaseDate DateTime?
+  duration    Int?     // Duration in minutes
+  language    String   @default("en")
+  country     String   @default("US")
+
+  // Media
+  posterUrl      String?
+  backdropUrl    String?
+  trailerUrl     String?
+  videoUrl       String?
+
+  // Ratings & Stats
+  rating         Float?     @default(0)
+  voteCount      Int        @default(0)
+  popularity     Float      @default(0)
+
+  // Content Details
+  genre          String?
+  director       String?
+  cast           String[]   // Array of actor names
+  productionCompany String?
+
+  // Status
+  status         MovieStatus @default(DRAFT)
+  isAdult        Boolean     @default(false)
+  isFeatured     Boolean     @default(false)
+
+  // Metadata
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  createdBy      String?     // User ID who created this
+  updatedBy      String?     // User ID who last updated this
+
+  // Relations
+  categories     Categories[]
+
+  @@index([title])
+  @@index([releaseDate])
+  @@index([rating])
+  @@index([popularity])
+  @@index([status])
+  @@index([isFeatured])
+  @@index([genre])
+  @@index([language])
+  @@index([country])
+}
+
+model Series {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  firstAirDate DateTime?
+  lastAirDate DateTime?
+  language    String   @default("en")
+  country     String   @default("US")
+
+  // Media
+  posterUrl      String?
+  backdropUrl    String?
+  trailerUrl     String?
+
+  // Ratings & Stats
+  rating         Float?     @default(0)
+  voteCount      Int        @default(0)
+  popularity     Float      @default(0)
+
+  // Content Details
+  genre          String?
+  creator        String?
+  network        String?
+  productionCompany String?
+
+  // Series Specific
+  numberOfSeasons Int       @default(1)
+  numberOfEpisodes Int      @default(1)
+  episodeRuntime  Int[]     // Array of episode runtimes in minutes
+  status          SeriesStatus @default(PLANNED)
+
+  // Status
+  isAdult        Boolean     @default(false)
+  isFeatured     Boolean     @default(false)
+
+  // Metadata
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  createdBy      String?     // User ID who created this
+  updatedBy      String?     // User ID who last updated this
+
+  // Relations
+  categories     Categories[]
+  seasons        Seasons[]
+
+  @@index([title])
+  @@index([firstAirDate])
+  @@index([rating])
+  @@index([popularity])
+  @@index([status])
+  @@index([isFeatured])
+  @@index([genre])
+  @@index([language])
+  @@index([country])
+}
+
+model Seasons {
+  id          String   @id @default(cuid())
+  seriesId    String
+  seasonNumber Int
+  title       String?
+  description String?
+  airDate     DateTime?
+  posterUrl   String?
+
+  // Season Stats
+  episodeCount Int      @default(0)
+
+  // Metadata
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  series      Series   @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  episodes    Episodes[]
+
+  @@unique([seriesId, seasonNumber])
+  @@index([seriesId])
+  @@index([airDate])
+}
+
+model Episodes {
+  id          String   @id @default(cuid())
+  seasonId    String
+  episodeNumber Int
+  title       String
+  description String?
+  airDate     DateTime?
+  duration    Int?     // Duration in minutes
+
+  // Media
+  stillUrl    String?
+  videoUrl    String?
+
+  // Metadata
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  season      Seasons  @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  @@unique([seasonId, episodeNumber])
+  @@index([seasonId])
+  @@index([airDate])
+}
+
+model Categories {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  slug        String   @unique
+  type        CategoryType @default(MOVIE)
+
+  // Media
+  posterUrl   String?
+  backdropUrl String?
+
+  // Status
+  isActive    Boolean  @default(true)
+
+  // Metadata
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String?  // User ID who created this
+  updatedBy   String?  // User ID who last updated this
+
+  // Relations
+  movies      Movies[]
+  series      Series[]
+
+  @@index([name])
+  @@index([slug])
+  @@index([type])
+  @@index([isActive])
+}
+
+model Genres {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+
+  // Media
+  posterUrl   String?
+
+  // Status
+  isActive    Boolean  @default(true)
+
+  // Metadata
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([name])
+  @@index([slug])
+  @@index([isActive])
+}
+
+// Enums
+enum MovieStatus {
+  DRAFT
+  IN_PRODUCTION
+  POST_PRODUCTION
+  RELEASED
+  CANCELLED
+}
+
+enum SeriesStatus {
+  PLANNED
+  IN_PRODUCTION
+  PILOT
+  ENDED
+  CANCELLED
+  RETURNING_SERIES
+}
+
+enum CategoryType {
+  MOVIE
+  SERIES
+  BOTH
+}

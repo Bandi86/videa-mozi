@@ -1,0 +1,402 @@
+# Moderation Service GraphQL Schema
+
+type Query {
+  # Report queries
+  report(id: ID!): Report
+  reports(
+    status: ReportStatus
+    reportType: ReportType
+    priority: Int
+    assignedTo: ID
+    reporterId: ID
+    reportedUserId: ID
+    contentId: ID
+    contentType: ContentType
+    page: Int = 1
+    limit: Int = 20
+  ): ReportConnection!
+
+  # Content flag queries
+  contentFlag(id: ID!): ContentFlag
+  contentFlags(
+    contentId: ID
+    contentType: ContentType
+    flagType: ContentFlagType
+    isResolved: Boolean
+    confidenceMin: Float
+    confidenceMax: Float
+    page: Int = 1
+    limit: Int = 20
+  ): ContentFlagConnection!
+  contentFlagsByContent(contentId: ID!): [ContentFlag!]!
+
+  # Moderation queue queries
+  moderationQueueItem(id: ID!): ModerationQueueItem
+  moderationQueueItems(
+    contentType: ContentType
+    priority: Int
+    assignedTo: ID
+    isProcessed: Boolean
+    page: Int = 1
+    limit: Int = 20
+  ): ModerationQueueItemConnection!
+  unassignedQueueItems(limit: Int = 10): [ModerationQueueItem!]!
+
+  # Appeal queries
+  appeal(id: ID!): Appeal
+  appeals(
+    appellantId: ID
+    status: String
+    reviewedBy: ID
+    page: Int = 1
+    limit: Int = 20
+  ): AppealConnection!
+  pendingAppeals(page: Int = 1, limit: Int = 20): AppealConnection!
+  appealTimeline(reportId: ID!): AppealTimeline!
+
+  # Statistics queries
+  reportStats(dateFrom: DateTime, dateTo: DateTime): ReportStats!
+  contentFlagStats(dateFrom: DateTime, dateTo: DateTime): ContentFlagStats!
+  moderationQueueStats(dateFrom: DateTime, dateTo: DateTime): ModerationQueueStats!
+  appealStats(dateFrom: DateTime, dateTo: DateTime): AppealStats!
+
+  # Dashboard queries
+  moderationDashboard(dateFrom: DateTime, dateTo: DateTime): ModerationDashboard!
+}
+
+type Mutation {
+  # Report mutations
+  createReport(input: CreateReportInput!): Report!
+  updateReport(id: ID!, input: UpdateReportInput!): Report!
+  assignReport(id: ID!, moderatorId: ID!): Report!
+  resolveReport(id: ID!, resolution: String!): Report!
+  deleteReport(id: ID!): Boolean!
+
+  # Content flag mutations
+  createContentFlag(input: CreateContentFlagInput!): ContentFlag!
+  updateContentFlag(id: ID!, input: UpdateContentFlagInput!): ContentFlag!
+  resolveContentFlag(id: ID!, resolvedBy: ID!): ContentFlag!
+  deleteContentFlag(id: ID!): Boolean!
+  bulkResolveContentFlags(flagIds: [ID!]!, resolvedBy: ID!): BulkResolveResult!
+
+  # Moderation queue mutations
+  addToModerationQueue(input: CreateQueueItemInput!): ModerationQueueItem!
+  updateQueueItem(id: ID!, input: UpdateQueueItemInput!): ModerationQueueItem!
+  assignQueueItem(id: ID!, moderatorId: ID!): ModerationQueueItem!
+  processQueueItem(id: ID!, action: ModerationAction!, notes: String): ModerationQueueItem!
+  deleteQueueItem(id: ID!): Boolean!
+  bulkAssignQueueItems(itemIds: [ID!]!, moderatorId: ID!): BulkAssignResult!
+
+  # Appeal mutations
+  createAppeal(input: CreateAppealInput!): Appeal!
+  updateAppeal(id: ID!, input: UpdateAppealInput!): Appeal!
+  approveAppeal(id: ID!, reviewerId: ID!, reviewNotes: String): Appeal!
+  rejectAppeal(id: ID!, reviewerId: ID!, reviewNotes: String): Appeal!
+  deleteAppeal(id: ID!): Boolean!
+  canUserAppeal(reportId: ID!, userId: ID!): Boolean!
+}
+
+# Enums
+enum ReportStatus {
+  PENDING
+  UNDER_REVIEW
+  RESOLVED
+  DISMISSED
+}
+
+enum ReportType {
+  SPAM
+  HARASSMENT
+  INAPPROPRIATE_CONTENT
+  COPYRIGHT_VIOLATION
+  HATE_SPEECH
+  THREAT
+  MISLEADING
+  OTHER
+}
+
+enum ContentFlagType {
+  EXPLICIT_CONTENT
+  VIOLENCE
+  HATE_SPEECH
+  SPAM
+  MISINFORMATION
+  COPYRIGHT
+  OTHER
+}
+
+enum ContentType {
+  POST
+  COMMENT
+  USER_PROFILE
+  MEDIA
+  MESSAGE
+}
+
+enum ModerationAction {
+  NONE
+  WARNING
+  CONTENT_REMOVAL
+  USER_SUSPENSION
+  USER_BAN
+  CONTENT_QUARANTINE
+}
+
+# Input types
+input CreateReportInput {
+  reporterId: ID!
+  reportedUserId: ID
+  contentId: ID
+  contentType: ContentType
+  reportType: ReportType!
+  reason: String
+  description: String
+  priority: Int
+}
+
+input UpdateReportInput {
+  status: ReportStatus
+  priority: Int
+  assignedTo: ID
+  resolution: String
+}
+
+input CreateContentFlagInput {
+  contentId: ID!
+  contentType: ContentType!
+  flagType: ContentFlagType!
+  confidence: Float!
+  flaggedBy: ID
+  reason: String
+  metadata: JSON
+}
+
+input UpdateContentFlagInput {
+  isResolved: Boolean
+  resolvedAt: DateTime
+  resolvedBy: ID
+  confidence: Float
+  reason: String
+  metadata: JSON
+}
+
+input CreateQueueItemInput {
+  contentId: ID!
+  contentType: ContentType!
+  priority: Int
+  reason: String
+  flags: [ID!]
+}
+
+input UpdateQueueItemInput {
+  assignedTo: ID
+  isProcessed: Boolean
+  processedAt: DateTime
+  action: ModerationAction
+  notes: String
+}
+
+input CreateAppealInput {
+  reportId: ID!
+  appellantId: ID!
+  reason: String!
+}
+
+input UpdateAppealInput {
+  status: String
+  reviewedBy: ID
+  reviewedAt: DateTime
+  reviewNotes: String
+}
+
+# Object types
+type Report {
+  id: ID!
+  reporterId: String!
+  reportedUserId: String
+  contentId: String
+  contentType: ContentType
+  reportType: ReportType!
+  reason: String
+  description: String
+  status: ReportStatus!
+  priority: Int!
+  assignedTo: String
+  reviewedAt: DateTime
+  reviewedBy: String
+  resolution: String
+  createdAt: DateTime!
+  updatedAt: DateTime!
+
+  # Relations
+  reporter: User!
+  reportedUser: User
+  assignedModerator: User
+  reviewer: User
+}
+
+type ContentFlag {
+  id: ID!
+  contentId: String!
+  contentType: ContentType!
+  flagType: ContentFlagType!
+  confidence: Float!
+  flaggedBy: String
+  reason: String
+  metadata: JSON
+  isResolved: Boolean!
+  resolvedAt: DateTime
+  resolvedBy: String
+  createdAt: DateTime!
+  updatedAt: DateTime!
+
+  # Relations
+  resolver: User
+}
+
+type ModerationQueueItem {
+  id: ID!
+  contentId: String!
+  contentType: ContentType!
+  priority: Int!
+  reason: String
+  flags: JSON
+  assignedTo: String
+  isProcessed: Boolean!
+  processedAt: DateTime
+  action: ModerationAction!
+  notes: String
+  createdAt: DateTime!
+  updatedAt: DateTime!
+
+  # Relations
+  assignedModerator: User
+}
+
+type Appeal {
+  id: ID!
+  reportId: String!
+  appellantId: String!
+  reason: String!
+  status: String!
+  reviewedBy: String
+  reviewedAt: DateTime
+  reviewNotes: String
+  createdAt: DateTime!
+  updatedAt: DateTime!
+
+  # Relations
+  report: Report!
+  appellant: User!
+  reviewer: User
+}
+
+type User {
+  id: ID!
+  username: String
+  email: String
+  role: String!
+  isActive: Boolean!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+# Connection types for pagination
+type ReportConnection {
+  data: [Report!]!
+  pagination: Pagination!
+}
+
+type ContentFlagConnection {
+  data: [ContentFlag!]!
+  pagination: Pagination!
+}
+
+type ModerationQueueItemConnection {
+  data: [ModerationQueueItem!]!
+  pagination: Pagination!
+}
+
+type AppealConnection {
+  data: [Appeal!]!
+  pagination: Pagination!
+}
+
+type Pagination {
+  page: Int!
+  limit: Int!
+  total: Int!
+  pages: Int!
+}
+
+# Statistics types
+type ReportStats {
+  total: Int!
+  pending: Int!
+  resolved: Int!
+  dismissed: Int!
+  byType: JSON!
+  byPriority: JSON!
+}
+
+type ContentFlagStats {
+  total: Int!
+  resolved: Int!
+  unresolved: Int!
+  byType: JSON!
+  byContentType: JSON!
+  averageConfidence: Float!
+}
+
+type ModerationQueueStats {
+  total: Int!
+  processed: Int!
+  unprocessed: Int!
+  assigned: Int!
+  unassigned: Int!
+  byType: JSON!
+  byPriority: JSON!
+}
+
+type AppealStats {
+  total: Int!
+  pending: Int!
+  approved: Int!
+  rejected: Int!
+  byStatus: JSON!
+}
+
+type ModerationDashboard {
+  queue: ModerationQueueStats!
+  reports: ReportStats!
+  contentFlags: ContentFlagStats!
+  appeals: AppealStats!
+  timestamp: DateTime!
+}
+
+type AppealTimeline {
+  appeal: Appeal
+  timeline: [TimelineEvent!]!
+}
+
+type TimelineEvent {
+  type: String!
+  timestamp: DateTime!
+  user: User!
+  description: String!
+  details: String
+}
+
+# Result types for bulk operations
+type BulkResolveResult {
+  count: Int!
+}
+
+type BulkAssignResult {
+  count: Int!
+}
+
+# Scalars
+scalar DateTime
+scalar JSON
+scalar Upload

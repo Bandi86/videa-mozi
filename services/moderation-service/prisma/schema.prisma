@@ -1,0 +1,248 @@
+// Prisma schema for Moderation Service
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ReportStatus {
+  PENDING
+  UNDER_REVIEW
+  RESOLVED
+  DISMISSED
+}
+
+enum ReportType {
+  SPAM
+  HARASSMENT
+  INAPPROPRIATE_CONTENT
+  COPYRIGHT_VIOLATION
+  HATE_SPEECH
+  THREAT
+  MISLEADING
+  OTHER
+}
+
+enum ContentFlagType {
+  EXPLICIT_CONTENT
+  VIOLENCE
+  HATE_SPEECH
+  SPAM
+  MISINFORMATION
+  COPYRIGHT
+  OTHER
+}
+
+enum ModerationAction {
+  NONE
+  WARNING
+  CONTENT_REMOVAL
+  USER_SUSPENSION
+  USER_BAN
+  CONTENT_QUARANTINE
+}
+
+enum ContentType {
+  POST
+  COMMENT
+  USER_PROFILE
+  MEDIA
+  MESSAGE
+}
+
+// Reports table
+model Report {
+  id            String   @id @default(cuid())
+  reporterId    String
+  reportedUserId String?
+  contentId     String?
+  contentType   ContentType?
+  reportType    ReportType
+  reason        String?
+  description   String?
+  status        ReportStatus @default(PENDING)
+  priority      Int      @default(1) // 1=Low, 2=Medium, 3=High, 4=Critical
+  assignedTo    String?
+  reviewedAt    DateTime?
+  reviewedBy    String?
+  resolution    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  reporter      User     @relation("ReportReporter", fields: [reporterId], references: [id])
+  reportedUser  User?    @relation("ReportReported", fields: [reportedUserId], references: [id])
+  assignedModerator User? @relation("ReportAssigned", fields: [assignedTo], references: [id])
+  reviewer      User?    @relation("ReportReviewer", fields: [reviewedBy], references: [id])
+
+  @@index([status])
+  @@index([reportType])
+  @@index([priority])
+  @@index([createdAt])
+  @@index([reporterId])
+  @@index([reportedUserId])
+  @@index([assignedTo])
+}
+
+// Content flags for automated moderation
+model ContentFlag {
+  id          String   @id @default(cuid())
+  contentId   String
+  contentType ContentType
+  flagType    ContentFlagType
+  confidence  Float    // AI confidence score (0.0 to 1.0)
+  flaggedBy   String?  // AI model or moderator ID
+  reason      String?
+  metadata    Json?    // Additional data from AI/moderation system
+  isResolved  Boolean  @default(false)
+  resolvedAt  DateTime?
+  resolvedBy  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  resolver    User?    @relation(fields: [resolvedBy], references: [id])
+
+  @@index([contentId])
+  @@index([contentType])
+  @@index([flagType])
+  @@index([isResolved])
+  @@index([createdAt])
+  @@unique([contentId, flagType])
+}
+
+// Moderation queue for pending reviews
+model ModerationQueue {
+  id          String   @id @default(cuid())
+  contentId   String
+  contentType ContentType
+  priority    Int      @default(1)
+  reason      String?
+  flags       Json?    // Array of flag IDs
+  assignedTo  String?
+  isProcessed Boolean  @default(false)
+  processedAt DateTime?
+  action      ModerationAction @default(NONE)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  assignedModerator User? @relation(fields: [assignedTo], references: [id])
+
+  @@index([isProcessed])
+  @@index([priority])
+  @@index([assignedTo])
+  @@index([createdAt])
+}
+
+// Moderation actions history
+model ModerationActionLog {
+  id         String   @id @default(cuid())
+  moderatorId String
+  action     ModerationAction
+  targetId   String   // User or content ID
+  targetType String   // "user" or "content"
+  reason     String?
+  metadata   Json?    // Additional action data
+  createdAt  DateTime @default(now())
+
+  // Relations
+  moderator  User     @relation(fields: [moderatorId], references: [id])
+
+  @@index([moderatorId])
+  @@index([targetId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// Appeal system
+model Appeal {
+  id            String   @id @default(cuid())
+  reportId      String
+  appellantId   String   // User who is appealing
+  reason        String
+  status        String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  reviewedBy    String?
+  reviewedAt    DateTime?
+  reviewNotes   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  report        Report   @relation(fields: [reportId], references: [id])
+  appellant     User     @relation("AppealAppellant", fields: [appellantId], references: [id])
+  reviewer      User?    @relation("AppealReviewer", fields: [reviewedBy], references: [id])
+
+  @@index([status])
+  @@index([appellantId])
+  @@index([createdAt])
+}
+
+// Moderation rules and policies
+model ModerationRule {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  ruleType    String   // AUTOMATED, MANUAL, HYBRID
+  conditions  Json     // Rule conditions
+  actions     Json     // Actions to take
+  isActive    Boolean  @default(true)
+  priority    Int      @default(1)
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  creator     User     @relation(fields: [createdBy], references: [id])
+
+  @@index([isActive])
+  @@index([ruleType])
+  @@index([priority])
+}
+
+// Content moderation stats
+model ModerationStats {
+  id              String   @id @default(cuid())
+  date            DateTime @unique
+  totalReports    Int      @default(0)
+  resolvedReports Int      @default(0)
+  flaggedContent  Int      @default(0)
+  removedContent  Int      @default(0)
+  bannedUsers     Int      @default(0)
+  appeals         Int      @default(0)
+  approvedAppeals Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  @@index([date])
+}
+
+// User model (simplified for moderation purposes)
+model User {
+  id        String   @id @default(cuid())
+  username  String?  @unique
+  email     String?  @unique
+  role      String   @default("user")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  reportsAsReporter      Report[] @relation("ReportReporter")
+  reportsAsReported      Report[] @relation("ReportReported")
+  reportsAssigned        Report[] @relation("ReportAssigned")
+  reportsReviewed        Report[] @relation("ReportReviewer")
+  contentFlagsResolved   ContentFlag[]
+  moderationQueueAssigned ModerationQueue[]
+  moderationActions      ModerationActionLog[]
+  appealsAsAppellant     Appeal[] @relation("AppealAppellant")
+  appealsReviewed        Appeal[] @relation("AppealReviewer")
+  moderationRulesCreated ModerationRule[]
+
+  @@index([role])
+  @@index([isActive])
+}

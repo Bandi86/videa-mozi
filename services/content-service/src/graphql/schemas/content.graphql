@@ -1,0 +1,365 @@
+# Content Service GraphQL Schema
+
+# Enums
+enum MovieStatus {
+  DRAFT
+  IN_PRODUCTION
+  POST_PRODUCTION
+  RELEASED
+  CANCELLED
+}
+
+enum SeriesStatus {
+  PLANNED
+  IN_PRODUCTION
+  PILOT
+  ENDED
+  CANCELLED
+  RETURNING_SERIES
+}
+
+enum CategoryType {
+  MOVIE
+  SERIES
+  BOTH
+}
+
+enum SortDirection {
+  ASC
+  DESC
+}
+
+# Input Types
+input MovieFilters {
+  categoryId: ID
+  genre: String
+  search: String
+  featured: Boolean
+  status: MovieStatus
+  sortBy: String = "popularity"
+  sortDirection: SortDirection = DESC
+  page: Int = 1
+  limit: Int = 20
+}
+
+input SeriesFilters {
+  categoryId: ID
+  genre: String
+  search: String
+  featured: Boolean
+  status: SeriesStatus
+  sortBy: String = "popularity"
+  sortDirection: SortDirection = DESC
+  page: Int = 1
+  limit: Int = 20
+}
+
+input CategoryFilters {
+  type: CategoryType
+  active: Boolean = true
+  search: String
+}
+
+input CreateMovieInput {
+  title: String!
+  description: String
+  releaseDate: DateTime
+  duration: Int
+  language: String
+  country: String
+  posterUrl: String
+  backdropUrl: String
+  trailerUrl: String
+  videoUrl: String
+  genre: String
+  director: String
+  cast: [String!]
+  productionCompany: String
+  isAdult: Boolean
+  isFeatured: Boolean
+  categoryIds: [ID!]
+}
+
+input UpdateMovieInput {
+  title: String
+  description: String
+  releaseDate: DateTime
+  duration: Int
+  language: String
+  country: String
+  posterUrl: String
+  backdropUrl: String
+  trailerUrl: String
+  videoUrl: String
+  genre: String
+  director: String
+  cast: [String!]
+  productionCompany: String
+  isAdult: Boolean
+  isFeatured: Boolean
+  categoryIds: [ID!]
+}
+
+input CreateSeriesInput {
+  title: String!
+  description: String
+  firstAirDate: DateTime
+  language: String
+  country: String
+  posterUrl: String
+  backdropUrl: String
+  trailerUrl: String
+  genre: String
+  creator: String
+  network: String
+  productionCompany: String
+  numberOfSeasons: Int
+  numberOfEpisodes: Int
+  episodeRuntime: [Int!]
+  status: SeriesStatus
+  isAdult: Boolean
+  isFeatured: Boolean
+  categoryIds: [ID!]
+}
+
+input UpdateSeriesInput {
+  title: String
+  description: String
+  firstAirDate: DateTime
+  language: String
+  country: String
+  posterUrl: String
+  backdropUrl: String
+  trailerUrl: String
+  genre: String
+  creator: String
+  network: String
+  productionCompany: String
+  numberOfSeasons: Int
+  numberOfEpisodes: Int
+  episodeRuntime: [Int!]
+  status: SeriesStatus
+  isAdult: Boolean
+  isFeatured: Boolean
+  categoryIds: [ID!]
+}
+
+input CreateCategoryInput {
+  name: String!
+  description: String
+  type: CategoryType!
+  posterUrl: String
+  isActive: Boolean
+}
+
+input UpdateCategoryInput {
+  name: String
+  description: String
+  posterUrl: String
+  isActive: Boolean
+}
+
+# Types
+type Movie {
+  id: ID!
+  title: String!
+  description: String
+  releaseDate: DateTime
+  duration: Int
+  language: String!
+  country: String!
+  posterUrl: String
+  backdropUrl: String
+  trailerUrl: String
+  videoUrl: String
+  rating: Float
+  voteCount: Int!
+  popularity: Float!
+  genre: String
+  director: String
+  cast: [String!]!
+  productionCompany: String
+  isAdult: Boolean!
+  isFeatured: Boolean!
+  status: MovieStatus!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  categories: [Category!]!
+  similarMovies(limit: Int = 5): [Movie!]!
+}
+
+type Series {
+  id: ID!
+  title: String!
+  description: String
+  firstAirDate: DateTime
+  lastAirDate: DateTime
+  language: String!
+  country: String!
+  posterUrl: String
+  backdropUrl: String
+  trailerUrl: String
+  rating: Float
+  voteCount: Int!
+  popularity: Float!
+  genre: String
+  creator: String
+  network: String
+  productionCompany: String
+  numberOfSeasons: Int!
+  numberOfEpisodes: Int!
+  episodeRuntime: [Int!]!
+  status: SeriesStatus!
+  isAdult: Boolean!
+  isFeatured: Boolean!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  categories: [Category!]!
+  seasons: [Season!]!
+  episodes(season: Int): [Episode!]!
+  similarSeries(limit: Int = 5): [Series!]!
+}
+
+type Season {
+  id: ID!
+  seriesId: ID!
+  seasonNumber: Int!
+  title: String
+  description: String
+  airDate: DateTime
+  posterUrl: String
+  episodeCount: Int!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  series: Series!
+  episodes: [Episode!]!
+}
+
+type Episode {
+  id: ID!
+  seasonId: ID!
+  episodeNumber: Int!
+  title: String!
+  description: String
+  airDate: DateTime
+  duration: Int
+  stillUrl: String
+  videoUrl: String
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  season: Season!
+  series: Series!
+}
+
+type Category {
+  id: ID!
+  name: String!
+  description: String
+  slug: String!
+  type: CategoryType!
+  posterUrl: String
+  isActive: Boolean!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  movies(limit: Int = 20, offset: Int = 0): [Movie!]!
+  series(limit: Int = 20, offset: Int = 0): [Series!]!
+  content(limit: Int = 20, offset: Int = 0): ContentConnection!
+}
+
+type ContentConnection {
+  edges: [ContentEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type ContentEdge {
+  node: Content!
+  cursor: String!
+}
+
+union Content = Movie | Series
+
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+
+# Custom Scalars
+scalar DateTime
+
+# Queries
+type Query {
+  # Movie queries
+  movie(id: ID!): Movie
+  movies(filters: MovieFilters): MovieConnection!
+  featuredMovies(limit: Int = 10): [Movie!]!
+  trendingMovies(limit: Int = 10, period: String = "week"): [Movie!]!
+  popularMovies(limit: Int = 10): [Movie!]!
+  searchMovies(query: String!, limit: Int = 20): [Movie!]!
+
+  # Series queries
+  series(id: ID!): Series
+  seriesList(filters: SeriesFilters): SeriesConnection!
+  featuredSeries(limit: Int = 10): [Series!]!
+  trendingSeries(limit: Int = 10, period: String = "week"): [Series!]!
+  popularSeries(limit: Int = 10): [Series!]!
+  searchSeries(query: String!, limit: Int = 20): [Series!]!
+
+  # Category queries
+  category(id: ID!): Category
+  categoryBySlug(slug: String!): Category
+  categories(filters: CategoryFilters): [Category!]!
+  popularCategories(limit: Int = 10): [Category!]!
+
+  # General queries
+  contentByCategory(categoryId: ID!, limit: Int = 20, offset: Int = 0): ContentConnection!
+  searchContent(query: String!, type: String, limit: Int = 20): ContentConnection!
+}
+
+type MovieConnection {
+  edges: [MovieEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type MovieEdge {
+  node: Movie!
+  cursor: String!
+}
+
+type SeriesConnection {
+  edges: [SeriesEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type SeriesEdge {
+  node: Series!
+  cursor: String!
+}
+
+# Mutations
+type Mutation {
+  # Movie mutations
+  createMovie(input: CreateMovieInput!): Movie!
+  updateMovie(id: ID!, input: UpdateMovieInput!): Movie!
+  deleteMovie(id: ID!): Boolean!
+
+  # Series mutations
+  createSeries(input: CreateSeriesInput!): Series!
+  updateSeries(id: ID!, input: UpdateSeriesInput!): Series!
+  deleteSeries(id: ID!): Boolean!
+
+  # Category mutations
+  createCategory(input: CreateCategoryInput!): Category!
+  updateCategory(id: ID!, input: UpdateCategoryInput!): Category!
+  deleteCategory(id: ID!): Boolean!
+}
+
+# Schema definition
+schema {
+  query: Query
+  mutation: Mutation
+}
